@@ -4,6 +4,7 @@ import { Cpu, Zap, Box, MessageSquare, Sparkles } from "lucide-react";
 import ChatInterface from "@/components/ChatInterface";
 import ProjectGallery from "@/components/ProjectGallery";
 import Hero from "@/components/Hero";
+import PcbGenerator from "@/components/PcbGenerator";
 
 const Index = () => {
   const [showChat, setShowChat] = useState(false);
@@ -83,6 +84,12 @@ const Index = () => {
 
           {/* Project Gallery */}
           <ProjectGallery />
+          
+          {/* PCB Generator Test */}
+          <section className="py-20 container mx-auto px-4">
+            <h2 className="text-3xl font-bold mb-8">Teste de Geração de PCB</h2>
+            <PcbGenerator />
+          </section>
         </>
       )}
     </div>
