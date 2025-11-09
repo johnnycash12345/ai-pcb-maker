@@ -20,7 +20,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY não configurada");
     }
     
-    console.log('Usando Lovable AI...');
+    console.log('Usando Lovable AI com streaming...');
 
     // Criar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -50,8 +50,8 @@ serve(async (req) => {
       content: message
     });
 
-    // Chamar Lovable AI (Google Gemini) com tool calling para extração de requisitos
-    console.log('Calling Lovable AI Gateway...');
+    // Chamar Lovable AI (Google Gemini) com streaming e tool calling
+    console.log('Calling Lovable AI Gateway with streaming...');
     
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -138,7 +138,7 @@ serve(async (req) => {
             }
           }
         ],
-        stream: false,
+        stream: true,
       }),
     });
 
@@ -163,113 +163,130 @@ serve(async (req) => {
       throw new Error(`Lovable AI error: ${errorText}`);
     }
     
-    console.log('Lovable AI call successful');
+    console.log('Lovable AI streaming started');
 
-    const aiData = await aiResponse.json();
-    const choice = aiData.choices[0];
-    const assistantMessage = choice.message.content;
-    
-    // Verificar se há tool call com especificações extraídas
-    let pcbSpecs = null;
-    if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
-      const toolCall = choice.message.tool_calls[0];
-      if (toolCall.function.name === 'extract_pcb_specs') {
-        pcbSpecs = JSON.parse(toolCall.function.arguments);
-        console.log('Extracted PCB specs:', pcbSpecs);
-      }
-    }
-
-    // Criar ou atualizar projeto
+    // Criar stream para processar resposta e extrair specs
+    const reader = aiResponse.body?.getReader();
+    const decoder = new TextDecoder();
+    let fullMessage = '';
+    let pcbSpecs: any = null;
     let finalProjectId = projectId;
-    
-    if (!projectId) {
-      // Criar novo projeto
-      const projectData: any = {
-        name: `Projeto ${new Date().toLocaleDateString()}`,
-        description: message.substring(0, 100),
-        type: pcbSpecs?.project_type || 'custom',
-        status: pcbSpecs ? 'completed' : 'generating'
-      };
-      
-      // Adicionar dados técnicos se extraídos
-      if (pcbSpecs) {
-        projectData.components = pcbSpecs.components;
-        projectData.requirements = {
-          power_specs: pcbSpecs.power_specs,
-          board_size: pcbSpecs.board_size
-        };
-        projectData.pcb_data = {
-          connections: pcbSpecs.connections,
-          schematic_generated: true
-        };
-      }
 
-      const { data: newProject, error: projectError } = await supabase
-        .from('projects')
-        .insert(projectData)
-        .select()
-        .single();
+    // Stream processor
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          while (true) {
+            const { done, value } = await reader!.read();
+            if (done) break;
 
-      if (projectError) {
-        console.error('Error creating project:', projectError);
-        throw projectError;
-      }
-      
-      finalProjectId = newProject.id;
-      console.log('Created new project:', finalProjectId);
-    } else if (pcbSpecs) {
-      // Atualizar projeto existente com especificações
-      const { error: updateError } = await supabase
-        .from('projects')
-        .update({
-          type: pcbSpecs.project_type,
-          status: 'completed',
-          components: pcbSpecs.components,
-          requirements: {
-            power_specs: pcbSpecs.power_specs,
-            board_size: pcbSpecs.board_size
-          },
-          pcb_data: {
-            connections: pcbSpecs.connections,
-            schematic_generated: true
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+
+                try {
+                  const parsed = JSON.parse(data);
+                  const delta = parsed.choices?.[0]?.delta;
+
+                  // Acumular conteúdo
+                  if (delta?.content) {
+                    fullMessage += delta.content;
+                    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content: delta.content })}\n\n`));
+                  }
+
+                  // Extrair tool calls
+                  if (delta?.tool_calls) {
+                    const toolCall = delta.tool_calls[0];
+                    if (toolCall?.function?.name === 'extract_pcb_specs' && toolCall?.function?.arguments) {
+                      try {
+                        pcbSpecs = JSON.parse(toolCall.function.arguments);
+                        console.log('Extracted PCB specs:', pcbSpecs);
+                      } catch (e) {
+                        console.error('Error parsing tool call:', e);
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.error('Error parsing chunk:', e);
+                }
+              }
+            }
           }
-        })
-        .eq('id', projectId);
-      
-      if (updateError) {
-        console.error('Error updating project:', updateError);
-      }
-    }
 
-    // Salvar mensagens no banco
-    const { error: messageError } = await supabase
-      .from('chat_messages')
-      .insert([
-        {
-          project_id: finalProjectId,
-          role: 'user',
-          content: message
-        },
-        {
-          project_id: finalProjectId,
-          role: 'assistant',
-          content: assistantMessage
+          // Após stream completo, salvar no banco
+          if (!finalProjectId) {
+            const projectData: any = {
+              name: `Projeto ${new Date().toLocaleDateString()}`,
+              description: message.substring(0, 100),
+              type: pcbSpecs?.project_type || 'custom',
+              status: pcbSpecs ? 'completed' : 'generating'
+            };
+
+            if (pcbSpecs) {
+              projectData.components = pcbSpecs.components;
+              projectData.requirements = {
+                power_specs: pcbSpecs.power_specs,
+                board_size: pcbSpecs.board_size
+              };
+              projectData.pcb_data = {
+                connections: pcbSpecs.connections,
+                schematic_generated: true
+              };
+            }
+
+            const { data: newProject } = await supabase
+              .from('projects')
+              .insert(projectData)
+              .select()
+              .single();
+
+            if (newProject) {
+              finalProjectId = newProject.id;
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ projectId: finalProjectId })}\n\n`));
+            }
+          } else if (pcbSpecs) {
+            await supabase
+              .from('projects')
+              .update({
+                type: pcbSpecs.project_type,
+                status: 'completed',
+                components: pcbSpecs.components,
+                requirements: {
+                  power_specs: pcbSpecs.power_specs,
+                  board_size: pcbSpecs.board_size
+                },
+                pcb_data: {
+                  connections: pcbSpecs.connections,
+                  schematic_generated: true
+                }
+              })
+              .eq('id', finalProjectId);
+          }
+
+          // Salvar mensagens
+          await supabase
+            .from('chat_messages')
+            .insert([
+              { project_id: finalProjectId, role: 'user', content: message },
+              { project_id: finalProjectId, role: 'assistant', content: fullMessage }
+            ]);
+
+          controller.enqueue(new TextEncoder().encode(`data: [DONE]\n\n`));
+          controller.close();
+        } catch (error) {
+          console.error('Stream error:', error);
+          controller.error(error);
         }
-      ]);
-
-    if (messageError) {
-      console.error('Error saving messages:', messageError);
-    }
-
-    return new Response(
-      JSON.stringify({ 
-        message: assistantMessage,
-        projectId: finalProjectId
-      }), 
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
-    );
+    });
+
+    return new Response(stream, {
+      headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' }
+    });
 
   } catch (error) {
     console.error('Error in ai-pcb-chat:', error);

@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Cpu, ArrowLeft, Download, MessageSquare, Box, FileText, Zap } from "lucide-react";
+import { Cpu, ArrowLeft, Download, MessageSquare, Box, FileText, Zap, Shield } from "lucide-react";
 import { toast } from "sonner";
 import PcbViewer3D from "@/components/PcbViewer3D";
 import SchematicViewer from "@/components/SchematicViewer";
+import DRCValidator from "@/components/DRCValidator";
 
 interface Project {
   id: string;
@@ -191,10 +192,14 @@ const ProjectView = () => {
 
       <div className="container mx-auto px-4 py-8">
         <Tabs defaultValue="schematic" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-5 mb-6">
             <TabsTrigger value="schematic">
               <Zap className="h-4 w-4 mr-2" />
               Esquemático
+            </TabsTrigger>
+            <TabsTrigger value="drc">
+              <Shield className="h-4 w-4 mr-2" />
+              Validação DRC
             </TabsTrigger>
             <TabsTrigger value="3d">
               <Box className="h-4 w-4 mr-2" />
@@ -229,6 +234,14 @@ const ProjectView = () => {
                 connections={project.pcb_data?.connections || []}
               />
             </div>
+          </TabsContent>
+
+          <TabsContent value="drc" className="space-y-4">
+            <DRCValidator
+              components={project.components || []}
+              connections={project.pcb_data?.connections || []}
+              powerSpecs={project.requirements?.power_specs}
+            />
           </TabsContent>
 
           <TabsContent value="3d" className="space-y-4">

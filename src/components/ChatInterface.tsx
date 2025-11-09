@@ -50,6 +50,16 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
     setInput('');
     setIsProcessing(true);
 
+    // Criar mensagem do assistente vazia para streaming
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      type: 'assistant',
+      content: '',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, assistantMessage]);
+
     try {
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-pcb-chat`,
@@ -70,24 +80,52 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
         throw new Error(errorData.error || 'Erro ao processar mensagem');
       }
 
-      const data = await response.json();
-      
-      // Salvar projectId se for novo
-      if (data.projectId && !projectId) {
-        setProjectId(data.projectId);
-      }
+      // Processar stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: data.message,
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, assistantMessage]);
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                
+                // Atualizar conteúdo da mensagem
+                if (parsed.content) {
+                  setMessages(prev => prev.map(msg => 
+                    msg.id === assistantMessageId 
+                      ? { ...msg, content: msg.content + parsed.content }
+                      : msg
+                  ));
+                }
+
+                // Salvar projectId se for novo
+                if (parsed.projectId && !projectId) {
+                  setProjectId(parsed.projectId);
+                }
+              } catch (e) {
+                console.error('Error parsing stream data:', e);
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error(error instanceof Error ? error.message : 'Erro ao enviar mensagem');
+      
+      // Remover mensagem vazia do assistente em caso de erro
+      setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
     } finally {
       setIsProcessing(false);
     }
