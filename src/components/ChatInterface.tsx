@@ -28,6 +28,7 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
   ]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
 
   const examplePrompts = [
     "Nó Meshtastic de longo alcance com GPS",
@@ -49,17 +50,47 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
     setInput('');
     setIsProcessing(true);
 
-    // Simulate AI processing
-    setTimeout(() => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-pcb-chat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            message: text,
+            projectId: projectId 
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao processar mensagem');
+      }
+
+      const data = await response.json();
+      
+      // Salvar projectId se for novo
+      if (data.projectId && !projectId) {
+        setProjectId(data.projectId);
+      }
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: 'Entendi! Vou criar um projeto de ' + text.toLowerCase() + '. Algumas perguntas:\n\n• Qual potência de transmissão você precisa?\n• Precisa de GPS integrado?\n• Tipo de alimentação? (USB-C, bateria, solar)\n• Tamanho máximo da placa?',
+        content: data.message,
         timestamp: new Date()
       };
+      
       setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error(error instanceof Error ? error.message : 'Erro ao enviar mensagem');
+    } finally {
       setIsProcessing(false);
-    }, 1500);
+    }
   };
 
   const handleGenerateProject = () => {
