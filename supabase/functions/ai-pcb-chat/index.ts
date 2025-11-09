@@ -15,22 +15,12 @@ serve(async (req) => {
     const { message, projectId } = await req.json();
     console.log('Received message:', message, 'for project:', projectId);
 
-    const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
-    console.log('DEEPSEEK_API_KEY exists:', !!DEEPSEEK_API_KEY);
-    console.log('Key length:', DEEPSEEK_API_KEY?.length);
-    console.log('Key prefix:', DEEPSEEK_API_KEY?.substring(0, 3));
-    
-    if (!DEEPSEEK_API_KEY) {
-      throw new Error("DEEPSEEK_API_KEY não configurada");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY não configurada");
     }
     
-    const cleanApiKey = DEEPSEEK_API_KEY.trim();
-    console.log('Cleaned key length:', cleanApiKey.length);
-    console.log('Key starts with sk-:', cleanApiKey.startsWith('sk-'));
-    
-    if (!cleanApiKey.startsWith('sk-')) {
-      console.error('AVISO: A chave API não começa com sk-. Formato: ' + cleanApiKey.substring(0, 10) + '...');
-    }
+    console.log('Usando Lovable AI...');
 
     // Criar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -60,73 +50,59 @@ serve(async (req) => {
       content: message
     });
 
-    // Chamar DeepSeek AI
-    console.log('Calling DeepSeek API at https://api.deepseek.com/chat/completions');
+    // Chamar Lovable AI (Google Gemini)
+    console.log('Calling Lovable AI Gateway...');
     
-    const requestBody = {
-      model: "deepseek-chat",
-      messages: [
-        { 
-          role: "system", 
-          content: `Você é um assistente especializado em design de PCB (Placas de Circuito Impresso). 
-          Sua função é ajudar usuários a criar projetos eletrônicos.
-          
-          Quando o usuário descrever um projeto:
-          1. Faça perguntas para entender os requisitos (potência, alimentação, interfaces, tamanho)
-          2. Sugira componentes apropriados (microcontroladores, sensores, conectores)
-          3. Forneça especificações técnicas detalhadas
-          4. Estime consumo de energia e autonomia
-          
-          Seja técnico mas acessível. Use exemplos práticos.` 
-        },
-        ...messages
-      ],
-      stream: false,
-    };
-    
-    console.log('Request body:', JSON.stringify(requestBody, null, 2));
-    
-    const aiResponse = await fetch("https://api.deepseek.com/chat/completions", {
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${cleanApiKey}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { 
+            role: "system", 
+            content: `Você é um assistente especializado em design de PCB (Placas de Circuito Impresso). 
+            Sua função é ajudar usuários a criar projetos eletrônicos.
+            
+            Quando o usuário descrever um projeto:
+            1. Faça perguntas para entender os requisitos (potência, alimentação, interfaces, tamanho)
+            2. Sugira componentes apropriados (microcontroladores, sensores, conectores)
+            3. Forneça especificações técnicas detalhadas
+            4. Estime consumo de energia e autonomia
+            
+            Seja técnico mas acessível. Use exemplos práticos.` 
+          },
+          ...messages
+        ],
+        stream: false,
+      }),
     });
 
-    console.log('DeepSeek API response status:', aiResponse.status);
+    console.log('Lovable AI response status:', aiResponse.status);
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('DeepSeek API error response:', errorText);
-      console.error('Response headers:', JSON.stringify([...aiResponse.headers.entries()]));
+      console.error('Lovable AI error:', aiResponse.status, errorText);
       
       if (aiResponse.status === 429) {
         return new Response(
-          JSON.stringify({ error: "Limite de taxa excedido. Tente novamente em alguns instantes." }), 
+          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns instantes." }), 
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       if (aiResponse.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos esgotados na DeepSeek. Verifique seu saldo." }), 
+          JSON.stringify({ error: "Créditos esgotados. Adicione créditos em Settings → Workspace → Usage." }), 
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (aiResponse.status === 401) {
-        return new Response(
-          JSON.stringify({ 
-            error: "Chave API DeepSeek inválida. Verifique se a chave está correta em https://platform.deepseek.com/api_keys",
-            details: errorText
-          }), 
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      throw new Error(`AI API error (${aiResponse.status}): ${errorText}`);
+      throw new Error(`Lovable AI error: ${errorText}`);
     }
     
-    console.log('DeepSeek API call successful');
+    console.log('Lovable AI call successful');
 
     const aiData = await aiResponse.json();
     const assistantMessage = aiData.choices[0].message.content;
