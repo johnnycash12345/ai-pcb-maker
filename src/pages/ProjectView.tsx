@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Cpu, ArrowLeft, Download, MessageSquare, Box, FileText } from "lucide-react";
+import { Cpu, ArrowLeft, Download, MessageSquare, Box, FileText, Zap } from "lucide-react";
 import { toast } from "sonner";
 import PcbViewer3D from "@/components/PcbViewer3D";
+import SchematicViewer from "@/components/SchematicViewer";
 
 interface Project {
   id: string;
@@ -189,8 +190,12 @@ const ProjectView = () => {
       </nav>
 
       <div className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="3d" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+        <Tabs defaultValue="schematic" className="w-full">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
+            <TabsTrigger value="schematic">
+              <Zap className="h-4 w-4 mr-2" />
+              Esquemático
+            </TabsTrigger>
             <TabsTrigger value="3d">
               <Box className="h-4 w-4 mr-2" />
               Visualização 3D
@@ -204,6 +209,27 @@ const ProjectView = () => {
               Histórico do Chat
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="schematic" className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-semibold">Esquemático Automático</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Gerado automaticamente baseado nas especificações do chat
+                  </p>
+                </div>
+                <Button variant="outline" onClick={() => toast.info('Exportação em desenvolvimento')}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Exportar PDF
+                </Button>
+              </div>
+              <SchematicViewer 
+                components={project.components || []}
+                connections={project.pcb_data?.connections || []}
+              />
+            </div>
+          </TabsContent>
 
           <TabsContent value="3d" className="space-y-4">
             <Card className="p-6">

@@ -50,7 +50,7 @@ serve(async (req) => {
       content: message
     });
 
-    // Chamar Lovable AI (Google Gemini)
+    // Chamar Lovable AI (Google Gemini) com tool calling para extração de requisitos
     console.log('Calling Lovable AI Gateway...');
     
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -65,7 +65,7 @@ serve(async (req) => {
           { 
             role: "system", 
             content: `Você é um assistente especializado em design de PCB (Placas de Circuito Impresso). 
-            Sua função é ajudar usuários a criar projetos eletrônicos.
+            Sua função é ajudar usuários a criar projetos eletrônicos e extrair especificações técnicas.
             
             Quando o usuário descrever um projeto:
             1. Faça perguntas para entender os requisitos (potência, alimentação, interfaces, tamanho)
@@ -73,9 +73,70 @@ serve(async (req) => {
             3. Forneça especificações técnicas detalhadas
             4. Estime consumo de energia e autonomia
             
+            Quando houver informações suficientes, use a ferramenta extract_pcb_specs para estruturar os dados técnicos.
             Seja técnico mas acessível. Use exemplos práticos.` 
           },
           ...messages
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "extract_pcb_specs",
+              description: "Extrai especificações técnicas de PCB quando há informação suficiente da conversa",
+              parameters: {
+                type: "object",
+                properties: {
+                  project_type: {
+                    type: "string",
+                    description: "Tipo do projeto (meshtastic, iot_sensor, power_supply, custom)"
+                  },
+                  components: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string", description: "Nome do componente" },
+                        reference: { type: "string", description: "Designador (U1, R1, etc)" },
+                        value: { type: "string", description: "Valor do componente" },
+                        footprint: { type: "string", description: "Footprint do componente" },
+                        x: { type: "number", description: "Posição X no esquemático" },
+                        y: { type: "number", description: "Posição Y no esquemático" }
+                      }
+                    }
+                  },
+                  connections: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        from: { type: "string", description: "Componente origem" },
+                        to: { type: "string", description: "Componente destino" },
+                        signal: { type: "string", description: "Nome do sinal" }
+                      }
+                    }
+                  },
+                  power_specs: {
+                    type: "object",
+                    properties: {
+                      voltage: { type: "string" },
+                      current_active: { type: "string" },
+                      current_sleep: { type: "string" }
+                    }
+                  },
+                  board_size: {
+                    type: "object",
+                    properties: {
+                      width: { type: "number" },
+                      height: { type: "number" }
+                    }
+                  }
+                },
+                required: ["project_type", "components"],
+                additionalProperties: false
+              }
+            }
+          }
         ],
         stream: false,
       }),
@@ -105,21 +166,47 @@ serve(async (req) => {
     console.log('Lovable AI call successful');
 
     const aiData = await aiResponse.json();
-    const assistantMessage = aiData.choices[0].message.content;
+    const choice = aiData.choices[0];
+    const assistantMessage = choice.message.content;
+    
+    // Verificar se há tool call com especificações extraídas
+    let pcbSpecs = null;
+    if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+      const toolCall = choice.message.tool_calls[0];
+      if (toolCall.function.name === 'extract_pcb_specs') {
+        pcbSpecs = JSON.parse(toolCall.function.arguments);
+        console.log('Extracted PCB specs:', pcbSpecs);
+      }
+    }
 
     // Criar ou atualizar projeto
     let finalProjectId = projectId;
     
     if (!projectId) {
       // Criar novo projeto
+      const projectData: any = {
+        name: `Projeto ${new Date().toLocaleDateString()}`,
+        description: message.substring(0, 100),
+        type: pcbSpecs?.project_type || 'custom',
+        status: pcbSpecs ? 'completed' : 'generating'
+      };
+      
+      // Adicionar dados técnicos se extraídos
+      if (pcbSpecs) {
+        projectData.components = pcbSpecs.components;
+        projectData.requirements = {
+          power_specs: pcbSpecs.power_specs,
+          board_size: pcbSpecs.board_size
+        };
+        projectData.pcb_data = {
+          connections: pcbSpecs.connections,
+          schematic_generated: true
+        };
+      }
+
       const { data: newProject, error: projectError } = await supabase
         .from('projects')
-        .insert({
-          name: `Projeto ${new Date().toLocaleDateString()}`,
-          description: message.substring(0, 100),
-          type: 'custom',
-          status: 'generating'
-        })
+        .insert(projectData)
         .select()
         .single();
 
@@ -130,6 +217,28 @@ serve(async (req) => {
       
       finalProjectId = newProject.id;
       console.log('Created new project:', finalProjectId);
+    } else if (pcbSpecs) {
+      // Atualizar projeto existente com especificações
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({
+          type: pcbSpecs.project_type,
+          status: 'completed',
+          components: pcbSpecs.components,
+          requirements: {
+            power_specs: pcbSpecs.power_specs,
+            board_size: pcbSpecs.board_size
+          },
+          pcb_data: {
+            connections: pcbSpecs.connections,
+            schematic_generated: true
+          }
+        })
+        .eq('id', projectId);
+      
+      if (updateError) {
+        console.error('Error updating project:', updateError);
+      }
     }
 
     // Salvar mensagens no banco
