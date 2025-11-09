@@ -16,6 +16,10 @@ serve(async (req) => {
     console.log('Received message:', message, 'for project:', projectId);
 
     const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
+    console.log('DEEPSEEK_API_KEY exists:', !!DEEPSEEK_API_KEY);
+    console.log('DEEPSEEK_API_KEY length:', DEEPSEEK_API_KEY?.length);
+    console.log('DEEPSEEK_API_KEY last 4 chars:', DEEPSEEK_API_KEY?.slice(-4));
+    
     if (!DEEPSEEK_API_KEY) {
       throw new Error("DEEPSEEK_API_KEY não configurada");
     }
