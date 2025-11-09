@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+import { exportSchematicToPDF, exportSchematicToSVG } from "@/lib/schematicExporter";
+import { toast } from "sonner";
 
 interface Component {
   name: string;
@@ -19,10 +23,35 @@ interface Connection {
 interface SchematicViewerProps {
   components?: Component[];
   connections?: Connection[];
+  projectName?: string;
 }
 
-const SchematicViewer = ({ components = [], connections = [] }: SchematicViewerProps) => {
+const SchematicViewer = ({ components = [], connections = [], projectName = "PCB Project" }: SchematicViewerProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const handleExportPDF = async () => {
+    if (!canvasRef.current) return;
+    try {
+      toast.info('Gerando PDF...');
+      await exportSchematicToPDF(canvasRef.current, projectName, components, connections);
+      toast.success('PDF exportado com sucesso!');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Erro ao exportar PDF');
+    }
+  };
+
+  const handleExportSVG = () => {
+    if (!canvasRef.current) return;
+    try {
+      toast.info('Gerando SVG...');
+      exportSchematicToSVG(canvasRef.current, projectName, components, connections);
+      toast.success('SVG exportado com sucesso!');
+    } catch (error) {
+      console.error('Error exporting SVG:', error);
+      toast.error('Erro ao exportar SVG');
+    }
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -130,6 +159,16 @@ const SchematicViewer = ({ components = [], connections = [] }: SchematicViewerP
 
   return (
     <Card className="p-4">
+      <div className="flex justify-end gap-2 mb-4">
+        <Button variant="outline" size="sm" onClick={handleExportSVG}>
+          <Download className="h-4 w-4 mr-2" />
+          Exportar SVG
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleExportPDF}>
+          <Download className="h-4 w-4 mr-2" />
+          Exportar PDF
+        </Button>
+      </div>
       <canvas
         ref={canvasRef}
         width={1200}

@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Cpu, ArrowLeft, Download, MessageSquare, Box, FileText, Zap, Shield } from "lucide-react";
+import { Cpu, ArrowLeft, Download, MessageSquare, Box, FileText, Zap, Shield, Battery, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import PcbViewer3D from "@/components/PcbViewer3D";
 import SchematicViewer from "@/components/SchematicViewer";
 import DRCValidator from "@/components/DRCValidator";
+import PowerSimulation from "@/components/PowerSimulation";
+import QuoteComparison from "@/components/QuoteComparison";
 
 interface Project {
   id: string;
@@ -192,48 +194,61 @@ const ProjectView = () => {
 
       <div className="container mx-auto px-4 py-8">
         <Tabs defaultValue="schematic" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-6">
+          <TabsList className="grid w-full grid-cols-7 mb-6">
             <TabsTrigger value="schematic">
               <Zap className="h-4 w-4 mr-2" />
               Esquemático
             </TabsTrigger>
+            <TabsTrigger value="power">
+              <Battery className="h-4 w-4 mr-2" />
+              Energia
+            </TabsTrigger>
+            <TabsTrigger value="quotes">
+              <DollarSign className="h-4 w-4 mr-2" />
+              Cotações
+            </TabsTrigger>
             <TabsTrigger value="drc">
               <Shield className="h-4 w-4 mr-2" />
-              Validação DRC
+              DRC
             </TabsTrigger>
             <TabsTrigger value="3d">
               <Box className="h-4 w-4 mr-2" />
-              Visualização 3D
+              3D
             </TabsTrigger>
             <TabsTrigger value="specs">
               <FileText className="h-4 w-4 mr-2" />
-              Especificações
+              Specs
             </TabsTrigger>
             <TabsTrigger value="chat">
               <MessageSquare className="h-4 w-4 mr-2" />
-              Histórico do Chat
+              Chat
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="schematic" className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-xl font-semibold">Esquemático Automático</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Gerado automaticamente baseado nas especificações do chat
-                  </p>
-                </div>
-                <Button variant="outline" onClick={() => toast.info('Exportação em desenvolvimento')}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar PDF
-                </Button>
-              </div>
-              <SchematicViewer 
-                components={project.components || []}
-                connections={project.pcb_data?.connections || []}
-              />
-            </div>
+            <SchematicViewer 
+              components={project.components || []}
+              connections={project.pcb_data?.connections || []}
+              projectName={project.name}
+            />
+          </TabsContent>
+
+          <TabsContent value="power" className="space-y-4">
+            <PowerSimulation 
+              components={project.components || []}
+              requirements={project.requirements}
+            />
+          </TabsContent>
+
+          <TabsContent value="quotes" className="space-y-4">
+            <QuoteComparison 
+              projectId={project.id}
+              boardSpecs={{
+                width: project.requirements?.board_size?.width || 50,
+                height: project.requirements?.board_size?.height || 30,
+                layers: project.requirements?.board_size?.layers || 2
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="drc" className="space-y-4">

@@ -2,3 +2,6 @@ project_id = "mvqcfnruzmaizcuofqlw"
 
 [functions.ai-pcb-chat]
 verify_jwt = false
+
+[functions.get-pcb-quotes]
+verify_jwt = false
