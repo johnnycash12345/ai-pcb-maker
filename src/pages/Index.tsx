@@ -1,13 +1,14 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Cpu, Zap, Box, MessageSquare, Sparkles } from "lucide-react";
 import ChatInterface from "@/components/ChatInterface";
 import ProjectGallery from "@/components/ProjectGallery";
 import Hero from "@/components/Hero";
-import PcbGenerator from "@/components/PcbGenerator";
 
 const Index = () => {
   const [showChat, setShowChat] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background">
@@ -23,7 +24,7 @@ const Index = () => {
             </h1>
           </div>
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
               Meus Projetos
             </Button>
             <Button variant="ghost" size="sm">
@@ -84,12 +85,6 @@ const Index = () => {
 
           {/* Project Gallery */}
           <ProjectGallery />
-          
-          {/* PCB Generator Test */}
-          <section className="py-20 container mx-auto px-4">
-            <h2 className="text-3xl font-bold mb-8">Teste de Geração de PCB</h2>
-            <PcbGenerator />
-          </section>
         </>
       )}
     </div>
