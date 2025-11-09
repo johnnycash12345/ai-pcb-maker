@@ -19,6 +19,15 @@ serve(async (req) => {
     if (!DEEPSEEK_API_KEY) {
       throw new Error("DEEPSEEK_API_KEY não configurada");
     }
+    
+    // Limpar a chave de espaços em branco
+    const cleanApiKey = DEEPSEEK_API_KEY.trim();
+    
+    if (!cleanApiKey.startsWith('sk-')) {
+      console.error('AVISO: A chave API não começa com sk-. Isso pode indicar uma chave inválida.');
+    }
+    
+    console.log('Tentando conectar à DeepSeek API...');
 
     // Criar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -49,10 +58,10 @@ serve(async (req) => {
     });
 
     // Chamar DeepSeek AI
-    const aiResponse = await fetch("https://api.deepseek.com/v1/chat/completions", {
+    const aiResponse = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+        Authorization: `Bearer ${cleanApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
