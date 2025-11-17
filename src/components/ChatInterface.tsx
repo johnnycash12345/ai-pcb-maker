@@ -22,7 +22,19 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
     {
       id: '1',
       type: 'assistant',
-      content: 'Olá! Sou seu assistente de design de PCB. Descreva o projeto eletrônico que você quer criar e eu vou gerar o design completo para você.',
+      content: `👋 Olá! Sou seu assistente de design de PCB com IA.
+
+**Como funciona:**
+1. Descreva seu projeto eletrônico (ex: "Quero criar um sensor IoT com ESP32")
+2. Responda minhas perguntas sobre requisitos técnicos
+3. Receba esquemáticos, validação DRC e cotações de fabricação
+
+**Exemplos de projetos:**
+• Nó Meshtastic de longo alcance com GPS
+• Sensor IoT com WiFi e sensores ambientais
+• Carregador solar com MPPT e monitoramento
+
+Digite sua ideia abaixo ou clique em um dos exemplos! 🚀`,
       timestamp: new Date()
     }
   ]);
@@ -38,6 +50,10 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
+
+    console.log('🚀 Enviando mensagem:', text);
+    console.log('📍 URL:', `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-pcb-chat`);
+    console.log('🆔 Project ID:', projectId);
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -61,23 +77,32 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
     setMessages(prev => [...prev, assistantMessage]);
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-pcb-chat`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            message: text,
-            projectId: projectId 
-          }),
-        }
-      );
+      console.log('📡 Fazendo requisição para edge function...');
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-pcb-chat`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          message: text,
+          projectId: projectId 
+        }),
+      });
+
+      console.log('📥 Resposta recebida:', response.status, response.statusText);
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao processar mensagem');
+        let errorMessage = 'Erro ao processar mensagem';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+          console.error('❌ Erro da API:', errorData);
+        } catch (e) {
+          console.error('❌ Erro ao parsear resposta de erro:', e);
+        }
+        throw new Error(errorMessage);
       }
 
       // Processar stream
@@ -85,11 +110,20 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
       const decoder = new TextDecoder();
 
       if (reader) {
+        console.log('📖 Iniciando leitura do stream...');
+        let hasReceivedData = false;
+        
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log('✅ Stream finalizado');
+            break;
+          }
 
+          hasReceivedData = true;
           const chunk = decoder.decode(value);
+          console.log('📦 Chunk recebido:', chunk.substring(0, 100));
+          
           const lines = chunk.split('\n').filter(line => line.trim() !== '');
 
           for (const line of lines) {
@@ -99,6 +133,7 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
 
               try {
                 const parsed = JSON.parse(data);
+                console.log('✨ Dados parseados:', parsed);
                 
                 // Atualizar conteúdo da mensagem
                 if (parsed.content) {
@@ -111,23 +146,39 @@ const ChatInterface = ({ onClose }: ChatInterfaceProps) => {
 
                 // Salvar projectId se for novo
                 if (parsed.projectId && !projectId) {
+                  console.log('🆔 Novo project ID:', parsed.projectId);
                   setProjectId(parsed.projectId);
+                  toast.success('Projeto criado com sucesso!');
                 }
               } catch (e) {
-                console.error('Error parsing stream data:', e);
+                console.error('❌ Erro ao parsear dados do stream:', e, 'Dados:', data);
               }
             }
           }
         }
+        
+        if (!hasReceivedData) {
+          console.warn('⚠️ Nenhum dado foi recebido do stream');
+        }
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      toast.error(error instanceof Error ? error.message : 'Erro ao enviar mensagem');
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao processar mensagem';
+      console.error('❌ Erro completo:', error);
       
-      // Remover mensagem vazia do assistente em caso de erro
-      setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
+      toast.error(errorMessage, {
+        description: 'Verifique o console do navegador para mais detalhes',
+        duration: 5000
+      });
+      
+      // Atualizar mensagem do assistente com erro ao invés de remover
+      setMessages(prev => prev.map(msg => 
+        msg.id === assistantMessageId 
+          ? { ...msg, content: `❌ Erro: ${errorMessage}\n\nPor favor, tente novamente ou reformule sua pergunta.` }
+          : msg
+      ));
     } finally {
       setIsProcessing(false);
+      console.log('✅ Processamento finalizado');
     }
   };
 

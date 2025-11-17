@@ -7,20 +7,26 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  console.log('🚀 Edge function called:', req.method, req.url);
+  
   if (req.method === 'OPTIONS') {
+    console.log('✅ CORS preflight request');
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log('📥 Parsing request body...');
     const { message, projectId } = await req.json();
-    console.log('Received message:', message, 'for project:', projectId);
+    console.log('✅ Received message:', message, 'for project:', projectId);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
+      console.error('❌ LOVABLE_API_KEY não configurada');
       throw new Error("LOVABLE_API_KEY não configurada");
     }
     
-    console.log('Usando Lovable AI com streaming...');
+    console.log('✅ Lovable API Key configurada');
+    console.log('🤖 Usando Lovable AI com streaming...');
 
     // Criar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
