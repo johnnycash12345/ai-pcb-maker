@@ -257,7 +257,7 @@ Use markdown, listas e emojis para clareza. Seja conciso mas completo.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.0-flash-exp",
         messages: [
           { role: "system", content: systemPrompt },
           ...conversationHistory
@@ -403,6 +403,8 @@ Use markdown, listas e emojis para clareza. Seja conciso mas completo.`;
     let fullResponse = '';
     let toolCallData = '';
     let isCollectingToolCall = false;
+    let toolCallId = '';
+    let buffer = '';
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -414,19 +416,25 @@ Use markdown, listas e emojis para clareza. Seja conciso mas completo.`;
             const { done, value } = await reader.read();
             if (done) break;
 
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
             for (const line of lines) {
-              if (!line.trim() || line.startsWith(':')) continue;
-              if (!line.startsWith('data: ')) continue;
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith(':')) continue;
+              if (!trimmed.startsWith('data: ')) continue;
 
-              const data = line.slice(6).trim();
-              if (data === '[DONE]') continue;
+              const data = trimmed.slice(6).trim();
+              if (data === '[DONE]') {
+                console.log('🏁 Stream concluído');
+                continue;
+              }
 
               try {
                 const parsed = JSON.parse(data);
                 const delta = parsed.choices?.[0]?.delta;
+                const finishReason = parsed.choices?.[0]?.finish_reason;
 
                 // Streaming de texto normal
                 if (delta?.content) {
@@ -437,29 +445,37 @@ Use markdown, listas e emojis para clareza. Seja conciso mas completo.`;
                   })}\n\n`));
                 }
 
-                // Tool call iniciando
+                // Tool call iniciando ou acumulando
                 if (delta?.tool_calls) {
-                  isCollectingToolCall = true;
                   const toolCall = delta.tool_calls[0];
+                  
+                  if (toolCall?.id) {
+                    toolCallId = toolCall.id;
+                  }
+                  
                   if (toolCall?.function?.name) {
+                    isCollectingToolCall = true;
                     console.log('🔧 Tool call detectado:', toolCall.function.name);
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
                       type: 'tool_start',
                       tool: toolCall.function.name
                     })}\n\n`));
                   }
+                  
                   if (toolCall?.function?.arguments) {
                     toolCallData += toolCall.function.arguments;
+                    console.log('📝 Acumulando args, total:', toolCallData.length, 'chars');
                   }
                 }
 
                 // Tool call completado
-                if (parsed.choices?.[0]?.finish_reason === 'tool_calls') {
+                if (finishReason === 'tool_calls' && isCollectingToolCall) {
                   console.log('✅ Tool call completo, processando...');
+                  console.log('📦 Tool data completo:', toolCallData);
                   
                   try {
                     const toolArgs = JSON.parse(toolCallData);
-                    console.log('📊 Args do tool:', JSON.stringify(toolArgs, null, 2));
+                    console.log('📊 Args do tool parseados:', JSON.stringify(toolArgs, null, 2));
 
                     // Criar projeto no banco
                     const newProject = {
@@ -516,18 +532,33 @@ Use markdown, listas e emojis para clareza. Seja conciso mas completo.`;
 
                   } catch (e) {
                     console.error('❌ Erro ao processar tool call:', e);
+                    if (e instanceof Error) {
+                      console.error('Stack:', e.stack);
+                    }
                     const errorMsg = e instanceof Error ? e.message : 'Erro desconhecido';
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
                       type: 'error',
                       error: 'Erro ao criar projeto: ' + errorMsg
                     })}\n\n`));
                   }
+                  
+                  // Reset para próximo tool call
+                  toolCallData = '';
+                  isCollectingToolCall = false;
                 }
 
               } catch (e) {
-                console.error('❌ Erro ao parsear chunk SSE:', e);
+                console.error('❌ Erro ao parsear linha SSE:', e);
+                if (e instanceof Error) {
+                  console.error('Linha problemática:', trimmed);
+                }
               }
             }
+          }
+          
+          // Processar buffer final
+          if (buffer.trim()) {
+            console.log('📋 Processando buffer final:', buffer);
           }
 
           // Salvar mensagens se não houve tool call
