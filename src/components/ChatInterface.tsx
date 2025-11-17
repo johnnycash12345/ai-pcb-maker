@@ -16,6 +16,7 @@ interface Message {
   metadata?: {
     componentsCount?: number;
     connectionsCount?: number;
+    tool?: string;
   };
 }
 
@@ -141,8 +142,8 @@ Digite sua ideia abaixo ou clique em um dos exemplos! 🚀`,
                 const parsed = JSON.parse(data);
                 console.log('✨ Dados parseados:', parsed);
                 
-                // Atualizar conteúdo da mensagem
-                if (parsed.content) {
+                // Streaming de texto
+                if (parsed.type === 'text' && parsed.content) {
                   setMessages(prev => prev.map(msg => 
                     msg.id === assistantMessageId 
                       ? { ...msg, content: msg.content + parsed.content }
@@ -150,41 +151,115 @@ Digite sua ideia abaixo ou clique em um dos exemplos! 🚀`,
                   ));
                 }
 
-                // Salvar projectId e mostrar feedback de progresso
-                if (parsed.projectId && !projectId) {
-                  console.log('🆔 Novo project ID:', parsed.projectId);
-                  setProjectId(parsed.projectId);
-                  
-                  // Adicionar mensagem de status "validando"
-                  const statusMessage: Message = {
-                    id: `status-${Date.now()}`,
-                    type: 'status',
-                    content: '',
-                    timestamp: new Date(),
-                    stage: 'validating'
-                  };
-                  setMessages(prev => [...prev, statusMessage]);
-                  
-                  toast.success('Projeto criado com sucesso!', {
-                    description: 'Validando design...',
-                    duration: 2000,
+                // Tool call iniciado
+                if (parsed.type === 'tool_start') {
+                  console.log('🔧 Tool iniciado:', parsed.tool);
+                  setMessages(prev => {
+                    const filtered = prev.filter(m => m.type !== 'status');
+                    return [...filtered, {
+                      id: `status-${Date.now()}`,
+                      type: 'status' as const,
+                      content: 'Gerando especificações técnicas...',
+                      timestamp: new Date(),
+                      stage: 'extracting' as const,
+                      metadata: { tool: parsed.tool }
+                    }];
                   });
+                }
+
+                // Projeto criado
+                if (parsed.type === 'project_created') {
+                  console.log('✅ Projeto criado:', parsed.projectId);
+                  const newProjectId = parsed.projectId;
+                  setProjectId(newProjectId);
                   
-                  // Aguardar um pouco para garantir que dados foram salvos
-                  setTimeout(() => {
-                    // Atualizar status para "complete"
-                    setMessages(prev => prev.map(msg => 
-                      msg.id === statusMessage.id 
-                        ? { ...msg, stage: 'complete' }
-                        : msg
-                    ));
+                  // Atualizar status para validação
+                  setMessages(prev => {
+                    const newMessages = [...prev];
+                    let lastStatusIdx = -1;
+                    for (let i = newMessages.length - 1; i >= 0; i--) {
+                      if (newMessages[i].type === 'status') {
+                        lastStatusIdx = i;
+                        break;
+                      }
+                    }
                     
-                    // Redirecionar após 1 segundo
+                    if (lastStatusIdx !== -1) {
+                      newMessages[lastStatusIdx] = {
+                        ...newMessages[lastStatusIdx],
+                        content: 'Validando componentes e conexões...',
+                        stage: 'validating',
+                        metadata: {
+                          componentsCount: parsed.project?.components?.length || 0,
+                          connectionsCount: parsed.project?.pcb_data?.connections?.length || 0
+                        }
+                      };
+                    }
+                    return newMessages;
+                  });
+
+                  toast.success('Projeto gerado com sucesso!');
+                  
+                  // Após 1.5s, marcar como completo e redirecionar
+                  setTimeout(() => {
+                    setMessages(prev => {
+                      const newMessages = [...prev];
+                      let lastStatusIdx = -1;
+                      for (let i = newMessages.length - 1; i >= 0; i--) {
+                        if (newMessages[i].type === 'status') {
+                          lastStatusIdx = i;
+                          break;
+                        }
+                      }
+                      
+                      if (lastStatusIdx !== -1) {
+                        newMessages[lastStatusIdx] = {
+                          ...newMessages[lastStatusIdx],
+                          stage: 'complete',
+                          content: '✅ Projeto completo e validado!'
+                        };
+                      }
+                      return newMessages;
+                    });
+                    
                     setTimeout(() => {
-                      console.log('🚀 Redirecionando para visualização do projeto');
-                      window.location.href = `/project/${parsed.projectId}`;
+                      console.log('🔄 Redirecionando para projeto:', newProjectId);
+                      window.location.href = `/project/${newProjectId}`;
                     }, 1000);
-                  }, 2000);
+                  }, 1500);
+                }
+
+                // Erro
+                if (parsed.type === 'error') {
+                  console.error('❌ Erro:', parsed.error);
+                  setMessages(prev => {
+                    const newMessages = [...prev];
+                    let lastStatusIdx = -1;
+                    for (let i = newMessages.length - 1; i >= 0; i--) {
+                      if (newMessages[i].type === 'status') {
+                        lastStatusIdx = i;
+                        break;
+                      }
+                    }
+                    
+                    if (lastStatusIdx !== -1) {
+                      newMessages[lastStatusIdx] = {
+                        ...newMessages[lastStatusIdx],
+                        stage: 'error',
+                        content: parsed.error
+                      };
+                    } else {
+                      newMessages.push({
+                        id: `status-${Date.now()}`,
+                        type: 'status',
+                        content: parsed.error,
+                        timestamp: new Date(),
+                        stage: 'error'
+                      });
+                    }
+                    return newMessages;
+                  });
+                  toast.error(parsed.error);
                 }
               } catch (e) {
                 console.error('❌ Erro ao parsear dados do stream:', e, 'Dados:', data);
