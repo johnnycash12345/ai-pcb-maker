@@ -5,12 +5,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Send, Sparkles, Loader2, CheckCircle2, Download, Package } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
+import ProjectGenerationStatus from "@/components/ProjectGenerationStatus";
 
 interface Message {
   id: string;
-  type: 'user' | 'assistant' | 'system';
+  type: 'user' | 'assistant' | 'system' | 'status';
   content: string;
   timestamp: Date;
+  stage?: 'analyzing' | 'extracting' | 'validating' | 'complete' | 'error';
+  metadata?: {
+    componentsCount?: number;
+    connectionsCount?: number;
+  };
 }
 
 interface ChatInterfaceProps {
@@ -144,11 +150,41 @@ Digite sua ideia abaixo ou clique em um dos exemplos! 🚀`,
                   ));
                 }
 
-                // Salvar projectId se for novo
+                // Salvar projectId e mostrar feedback de progresso
                 if (parsed.projectId && !projectId) {
                   console.log('🆔 Novo project ID:', parsed.projectId);
                   setProjectId(parsed.projectId);
-                  toast.success('Projeto criado com sucesso!');
+                  
+                  // Adicionar mensagem de status "validando"
+                  const statusMessage: Message = {
+                    id: `status-${Date.now()}`,
+                    type: 'status',
+                    content: '',
+                    timestamp: new Date(),
+                    stage: 'validating'
+                  };
+                  setMessages(prev => [...prev, statusMessage]);
+                  
+                  toast.success('Projeto criado com sucesso!', {
+                    description: 'Validando design...',
+                    duration: 2000,
+                  });
+                  
+                  // Aguardar um pouco para garantir que dados foram salvos
+                  setTimeout(() => {
+                    // Atualizar status para "complete"
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === statusMessage.id 
+                        ? { ...msg, stage: 'complete' }
+                        : msg
+                    ));
+                    
+                    // Redirecionar após 1 segundo
+                    setTimeout(() => {
+                      console.log('🚀 Redirecionando para visualização do projeto');
+                      window.location.href = `/project/${parsed.projectId}`;
+                    }, 1000);
+                  }, 2000);
                 }
               } catch (e) {
                 console.error('❌ Erro ao parsear dados do stream:', e, 'Dados:', data);
@@ -219,8 +255,13 @@ Digite sua ideia abaixo ou clique em um dos exemplos! 🚀`,
               <div className="max-w-3xl mx-auto space-y-4">
                 {messages.map((message) => (
                   <div key={message.id}>
-                    {message.type === 'system' ? (
-                      <ProjectGeneratedCard />
+                    {message.type === 'status' ? (
+                      <ProjectGenerationStatus
+                        stage={message.stage || 'analyzing'}
+                        message={message.content}
+                        componentsCount={message.metadata?.componentsCount}
+                        connectionsCount={message.metadata?.connectionsCount}
+                      />
                     ) : (
                       <div className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div
@@ -317,74 +358,6 @@ Digite sua ideia abaixo ou clique em um dos exemplos! 🚀`,
         </div>
       </div>
     </div>
-  );
-};
-
-const ProjectGeneratedCard = () => {
-  return (
-    <Card className="p-6 border-2 border-primary/20 bg-gradient-card shadow-glow-primary">
-      <div className="flex items-start gap-4">
-        <div className="bg-primary/10 p-3 rounded-lg">
-          <CheckCircle2 className="h-6 w-6 text-primary" />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold mb-2">🎉 Projeto Gerado: "Meshtastic Long Range Node v1.0"</h3>
-          
-          <div className="space-y-4">
-            <div>
-              <h4 className="font-medium mb-2">📊 Especificações:</h4>
-              <ul className="text-sm space-y-1 text-muted-foreground">
-                <li>• Dimensões: 50x30mm (2 camadas)</li>
-                <li>• Consumo: 240mA (ativo) / 2mA (sleep)</li>
-                <li>• Alcance estimado: 15-20km (linha de visada)</li>
-                <li>• Autonomia: 48h com bateria 2000mAh</li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-medium mb-2">📁 Arquivos Gerados:</h4>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" className="justify-start">
-                  <Download className="h-3 w-3 mr-2" />
-                  Esquemático (PDF)
-                </Button>
-                <Button variant="outline" size="sm" className="justify-start">
-                  <Download className="h-3 w-3 mr-2" />
-                  Layout PCB (PDF)
-                </Button>
-                <Button variant="outline" size="sm" className="justify-start">
-                  <Download className="h-3 w-3 mr-2" />
-                  Arquivos Gerber
-                </Button>
-                <Button variant="outline" size="sm" className="justify-start">
-                  <Download className="h-3 w-3 mr-2" />
-                  Lista de Materiais
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="font-medium mb-2">💰 Cotações de Fabricação:</h4>
-              <ul className="text-sm space-y-1 text-muted-foreground">
-                <li>• JLCPCB: $12.50 (10 unidades)</li>
-                <li>• PCBWay: $15.80 (10 unidades)</li>
-                <li>• OSHPark: $18.20 (3 unidades)</li>
-              </ul>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <Button className="flex-1 bg-gradient-hero">
-                <Package className="h-4 w-4 mr-2" />
-                Baixar Projeto Completo
-              </Button>
-              <Button variant="outline" className="flex-1">
-                Modificar Projeto
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Card>
   );
 };
 

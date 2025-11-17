@@ -42,11 +42,42 @@ const ProjectView = () => {
     if (id) {
       loadProject();
       loadMessages();
+
+      // Setup realtime subscription para atualizações do projeto
+      console.log('🔄 Configurando realtime updates para projeto:', id);
+      
+      const channel = supabase
+        .channel(`project-${id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'projects',
+            filter: `id=eq.${id}`
+          },
+          (payload) => {
+            console.log('📡 Atualização em tempo real recebida:', payload);
+            if (payload.eventType === 'UPDATE') {
+              setProject(payload.new as Project);
+              toast.success('Projeto atualizado!', {
+                description: 'Novos dados de esquemático recebidos',
+              });
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        console.log('🔌 Desconectando realtime updates');
+        supabase.removeChannel(channel);
+      };
     }
   }, [id]);
 
   const loadProject = async () => {
     try {
+      console.log('📥 Carregando projeto:', id);
       const { data, error } = await supabase
         .from('projects')
         .select('*')
@@ -54,9 +85,50 @@ const ProjectView = () => {
         .single();
 
       if (error) throw error;
+      
+      console.log('✅ Projeto carregado:', data);
+      
+      // Type casting seguro para arrays com validação runtime
+      const components = Array.isArray(data.components) ? data.components as any[] : [];
+      const pcbData = data.pcb_data as any;
+      const connections = Array.isArray(pcbData?.connections) ? pcbData.connections as any[] : [];
+      
+      console.log('📊 Componentes:', components.length);
+      console.log('🔗 Conexões:', connections.length);
+      
       setProject(data);
+      
+      // Validar dados se componentes existirem
+      if (components.length > 0) {
+        const { validatePCBData, testPCBGeneration } = await import('@/lib/pcbValidator');
+        
+        const validation = validatePCBData(components, connections);
+        
+        console.log('🔍 Validação:', validation);
+        
+        if (!validation.isValid) {
+          toast.error('Dados do projeto contêm erros', {
+            description: validation.errors[0],
+          });
+        } else if (validation.warnings.length > 0) {
+          toast.warning('Projeto carregado com avisos', {
+            description: validation.warnings[0],
+          });
+        } else {
+          toast.success('Projeto validado com sucesso!');
+        }
+
+        // Executar testes automáticos
+        const tests = testPCBGeneration(components, connections);
+        
+        console.log('🧪 Testes automáticos:', tests);
+        
+        if (!tests.passed) {
+          console.warn('⚠️ Alguns testes falharam:', tests.results);
+        }
+      }
     } catch (error) {
-      console.error('Error loading project:', error);
+      console.error('❌ Erro ao carregar projeto:', error);
       toast.error('Erro ao carregar projeto');
     } finally {
       setIsLoading(false);
