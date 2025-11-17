@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, CheckCircle2, AlertTriangle, Info } from "lucide-react";
-import { validateDesign, DRCError, getSeverityColor, getSeverityIcon } from "@/lib/drcValidator";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
+import type { DRCError } from "@/lib/drcValidator";
+import { validateDesign } from "@/lib/drcValidator";
 
-interface Component {
+type Component = {
   name: string;
   reference: string;
   value: string;
@@ -13,17 +14,33 @@ interface Component {
   y: number;
 }
 
-interface Connection {
+type Connection = {
   from: string;
   to: string;
   signal: string;
 }
 
-interface PowerSpecs {
+type PowerSpecs = {
   voltage?: string;
   current_active?: string;
   current_sleep?: string;
 }
+
+const getSeverityColor = (severity: DRCError['severity']) => {
+  switch (severity) {
+    case 'error': return 'text-red-600';
+    case 'warning': return 'text-yellow-600';
+    case 'info': return 'text-blue-600';
+  }
+};
+
+const getSeverityIcon = (severity: DRCError['severity']) => {
+  switch (severity) {
+    case 'error': return '❌';
+    case 'warning': return '⚠️';
+    case 'info': return 'ℹ️';
+  }
+};
 
 interface DRCValidatorProps {
   components?: Component[];

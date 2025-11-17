@@ -1,6 +1,6 @@
 // Biblioteca de componentes eletrônicos com especificações técnicas completas
 
-export interface ComponentSpec {
+export type ComponentSpec = {
   id: string;
   name: string;
   category: 'microcontroller' | 'lora' | 'gps' | 'power' | 'connector' | 'passive';
@@ -17,7 +17,7 @@ export interface ComponentSpec {
   datasheet?: string;
 }
 
-export interface ComponentPin {
+export type ComponentPin = {
   number: number;
   name: string;
   type: 'power' | 'ground' | 'io' | 'analog' | 'digital';

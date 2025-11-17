@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-interface Component {
+type Component = {
   name: string;
   reference: string;
   value: string;
@@ -10,7 +10,7 @@ interface Component {
   y: number;
 }
 
-interface Connection {
+type Connection = {
   from: string;
   to: string;
   signal: string;
