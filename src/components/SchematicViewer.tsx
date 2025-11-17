@@ -158,23 +158,39 @@ const SchematicViewer = ({ components = [], connections = [], projectName = "PCB
   }
 
   return (
-    <Card className="p-4">
-      <div className="flex justify-end gap-2 mb-4">
-        <Button variant="outline" size="sm" onClick={handleExportSVG}>
-          <Download className="h-4 w-4 mr-2" />
-          Exportar SVG
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleExportPDF}>
-          <Download className="h-4 w-4 mr-2" />
-          Exportar PDF
-        </Button>
+    <Card className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-base sm:text-lg font-semibold">Esquemático</h3>
+        <div className="flex gap-1 sm:gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportSVG}
+            className="h-8 sm:h-9 text-xs sm:text-sm"
+          >
+            <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">SVG</span>
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleExportPDF}
+            className="h-8 sm:h-9 text-xs sm:text-sm"
+          >
+            <Download className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">PDF</span>
+          </Button>
+        </div>
       </div>
-      <canvas
-        ref={canvasRef}
-        width={1200}
-        height={700}
-        className="w-full h-auto border border-border rounded-lg bg-white"
-      />
+      <div className="border rounded-lg overflow-hidden bg-white shadow-glow-secondary">
+        <canvas
+          ref={canvasRef}
+          width={800}
+          height={600}
+          className="w-full touch-pan-x touch-pan-y"
+          style={{ maxHeight: '70vh' }}
+        />
+      </div>
       <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
         <div>
           <h4 className="font-medium mb-2">Componentes</h4>

@@ -117,7 +117,7 @@ const PcbViewer3D = ({
   boardSize = [50, 30]
 }: PcbViewer3DProps) => {
   return (
-    <div className="w-full h-[500px] rounded-lg overflow-hidden border border-border bg-black/5">
+    <div className="w-full h-[300px] sm:h-[400px] lg:h-[500px] rounded-lg overflow-hidden border border-border bg-black/5 shadow-glow-primary">
       <Canvas shadows>
         <PerspectiveCamera makeDefault position={[60, 60, 60]} />
         <OrbitControls 
