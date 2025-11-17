@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Battery, Zap, Clock, TrendingDown } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import type { ComponentSpec } from "@/lib/componentLibrary";
 import { calculatePowerConsumption, getComponentById } from "@/lib/componentLibrary";
 
 interface PowerSimulationProps {

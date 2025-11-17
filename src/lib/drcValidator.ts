@@ -1,6 +1,6 @@
 // Design Rule Check (DRC) - Validação automática de design de PCB
 
-export interface DRCError {
+export type DRCError = {
   type: 'clearance' | 'routing' | 'power' | 'thermal' | 'signal_integrity';
   severity: 'error' | 'warning' | 'info';
   message: string;
@@ -8,7 +8,7 @@ export interface DRCError {
   components?: string[];
 }
 
-export interface DRCRules {
+export type DRCRules = {
   minTraceWidth: number; // mm
   minClearance: number; // mm
   minViaDiameter: number; // mm
@@ -24,20 +24,20 @@ export const DEFAULT_DRC_RULES: DRCRules = {
   maxBoardTemp: 85
 };
 
-interface Component {
+type Component = {
   name: string;
   reference: string;
   x: number;
   y: number;
 }
 
-interface Connection {
+type Connection = {
   from: string;
   to: string;
   signal: string;
 }
 
-interface PowerSpecs {
+type PowerSpecs = {
   voltage?: string;
   current_active?: string;
   current_sleep?: string;
@@ -241,20 +241,4 @@ const checkThermalDesign = (components: Component[], powerSpecs?: PowerSpecs): D
   });
 
   return errors;
-};
-
-export const getSeverityColor = (severity: DRCError['severity']) => {
-  switch (severity) {
-    case 'error': return 'text-destructive';
-    case 'warning': return 'text-yellow-600';
-    case 'info': return 'text-blue-600';
-  }
-};
-
-export const getSeverityIcon = (severity: DRCError['severity']) => {
-  switch (severity) {
-    case 'error': return '❌';
-    case 'warning': return '⚠️';
-    case 'info': return 'ℹ️';
-  }
 };
